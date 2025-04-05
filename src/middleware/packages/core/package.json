@@ -10,6 +10,7 @@
     "@semapps/jsonld": "1.1.1",
     "@semapps/ldp": "1.1.1",
     "@semapps/ontologies": "1.1.1",
+    "@semapps/social": "1.1.1",
     "@semapps/sparql-endpoint": "1.1.1",
     "@semapps/triplestore": "1.1.1",
     "@semapps/void": "1.1.1",

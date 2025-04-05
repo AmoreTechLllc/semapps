@@ -10,6 +10,7 @@
     "@semapps/middlewares": "1.1.1",
     "@semapps/mime-types": "1.1.1",
     "@semapps/ontologies": "1.1.1",
+    "@semapps/social": "1.1.1",
     "@semapps/triplestore": "1.1.1",
     "handlebars": "^4.7.7",
     "moleculer": "^0.14.18",
