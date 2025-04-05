@@ -3,7 +3,7 @@ const { ACTOR_TYPES } = require('@semapps/activitypub');
 const urlJoin = require('url-join');
 const { delay } = require('../util');
 
-module.export = {
+const getActorUri = {
   visibility: 'public',
   params: {
     actorSettings: { type: 'object', optional: false }
@@ -63,3 +63,5 @@ module.export = {
     }
   }
 };
+
+module.exports = getActorUri;
