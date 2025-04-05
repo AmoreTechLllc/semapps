@@ -10,6 +10,7 @@ const { TripleStoreService } = require('@semapps/triplestore');
 const { VoidService } = require('@semapps/void');
 const { WebAclService } = require('@semapps/webacl');
 const { WebfingerService } = require('@semapps/webfinger');
+const { SocialService } = require('@semapps/social');
 const { KeysService, SignatureService } = require('@semapps/crypto');
 const { WebIdService } = require('@semapps/webid');
 
@@ -56,6 +57,16 @@ const CoreService = {
   },
   created() {
     const { baseUrl, baseDir, triplestore, containers, ontologies } = this.settings;
+
+    if (this.settings.social !== false) {
+      this.broker.createService({
+        mixins: [SocialService],
+        settings: {
+          baseUrl,
+          ...this.settings.social
+        }
+      });
+    }
 
     if (this.settings.activitypub !== false) {
       this.broker.createService({
