@@ -1,152 +1,48 @@
-const fetch = require('node-fetch');
-const { namedNode, literal, triple, variable } = require('@rdfjs/data-model');
 const { MIME_TYPES } = require('@semapps/mime-types');
-const { arrayOf } = require('@semapps/ldp');
-const { ACTOR_TYPES, AS_PREFIX } = require('../../../constants');
-const { getSlugFromUri, waitForResource } = require('../../../utils');
+const { waitForResource } = require('../../../utils');
 
 /** @type {import('moleculer').ServiceSchema} */
 const ActorService = {
   name: 'activitypub.actor',
-  dependencies: ['activitypub.collection', 'ldp', 'signature'],
+  dependencies: ['activitypub.collection', 'social'],
   settings: {
     baseUri: null,
     selectActorData: null,
     podProvider: false
   },
   actions: {
+    /**
+     * @param {Context<{actorUri: string, webId?: string}>} ctx - Context object with params
+     * @returns {Promise<Actor|void>} - Returns the actor or void if nothe actor is not found
+     */
     async get(ctx) {
       const { actorUri, webId } = ctx.params;
-      // If dataset is not in the meta, assume that actor is remote
-      if (ctx.meta.dataset && !(await ctx.call('ldp.remote.isRemote', { resourceUri: actorUri }))) {
-        try {
-          // Don't return immediately the promise, or we won't be able to catch errors
-          const actor = await ctx.call('ldp.resource.get', { resourceUri: actorUri, accept: MIME_TYPES.JSON, webId });
-          return actor;
-        } catch (e) {
-          console.error(e);
-          return false;
-        }
-      } else {
-        const response = await fetch(actorUri, { headers: { Accept: 'application/json' } });
-        if (!response.ok) return false;
-        const actor = await response.json();
-        return actor;
-      }
+
+      return await ctx.call('social.getActor', { actorUri, webId }, { parentCtx: ctx });
     },
     async getProfile(ctx) {
       const { actorUri, webId } = ctx.params;
       const actor = await this.actions.get({ actorUri, webId }, { parentCtx: ctx });
+
       // If the URL is not in the same domain as the actor, it is most likely not a profile
       if (actor.url && new URL(actor.url).host === new URL(actorUri).host) {
-        return await ctx.call('ldp.resource.get', { resourceUri: actor.url, accept: MIME_TYPES.JSON, webId });
-      }
-    },
-    async appendActorData(ctx) {
-      const { actorUri } = ctx.params;
-      const userData = await this.actions.get({ actorUri, webId: 'system' }, { parentCtx: ctx });
-      const propertiesToAdd = this.settings.selectActorData ? this.settings.selectActorData(userData) : {};
-
-      if (!propertiesToAdd['http://www.w3.org/1999/02/22-rdf-syntax-ns#type']) {
-        // Ensure at least one actor type, otherwise ActivityPub-specific properties (inbox, public key...) will not be added
-        const resourceType = arrayOf(userData.type || userData['@type']);
-        const includeActorType = resourceType.some(type => Object.values(ACTOR_TYPES).includes(type));
-        if (!includeActorType) {
-          propertiesToAdd['http://www.w3.org/1999/02/22-rdf-syntax-ns#type'] = `${AS_PREFIX}Person`;
-        }
-      }
-
-      if (!propertiesToAdd['https://www.w3.org/ns/activitystreams#preferredUsername']) {
-        propertiesToAdd['https://www.w3.org/ns/activitystreams#preferredUsername'] = getSlugFromUri(
-          userData.id || userData['@id']
-        );
-      }
-
-      if (Object.keys(propertiesToAdd).length > 0) {
-        await ctx.call('ldp.resource.patch', {
-          resourceUri: actorUri,
-          triplesToAdd: Object.entries(propertiesToAdd).map(([predicate, subject]) =>
-            triple(
-              namedNode(actorUri),
-              namedNode(predicate),
-              typeof subject === 'string' && subject.startsWith('http') ? namedNode(subject) : literal(subject)
-            )
-          ),
-          webId: 'system'
+        return await ctx.call('social.resource.get', {
+          resourceUri: actor.url,
+          accept: MIME_TYPES.JSON,
+          webId: actorUri
         });
       }
     },
     async addEndpoint(ctx) {
       const { actorUri, predicate, endpoint } = ctx.params;
 
-      const account = await ctx.call('auth.account.findByWebId', { webId: actorUri });
-      const dataset = account.username;
-
-      await ctx.call('triplestore.update', {
-        query: {
-          type: 'update',
-          updates: [
-            {
-              updateType: 'insertdelete',
-              insert: [
-                {
-                  type: 'bgp',
-                  triples: [
-                    triple(
-                      namedNode(actorUri),
-                      namedNode('https://www.w3.org/ns/activitystreams#endpoints'),
-                      variable('endpoints')
-                    ),
-                    triple(variable('endpoints'), namedNode(predicate), namedNode(endpoint))
-                  ]
-                }
-              ],
-              delete: [],
-              where: [
-                {
-                  type: 'optional',
-                  patterns: [
-                    {
-                      type: 'bgp',
-                      triples: [
-                        triple(
-                          namedNode(actorUri),
-                          namedNode('https://www.w3.org/ns/activitystreams#endpoints'),
-                          variable('b0')
-                        )
-                      ]
-                    }
-                  ]
-                },
-                {
-                  type: 'bind',
-                  variable: variable('endpoints'),
-                  expression: {
-                    type: 'operation',
-                    operator: 'if',
-                    args: [
-                      {
-                        type: 'operation',
-                        operator: 'bound',
-                        args: [variable('b0')]
-                      },
-                      variable('b0'),
-                      {
-                        type: 'operation',
-                        operator: 'BNODE',
-                        args: []
-                      }
-                    ]
-                  }
-                }
-              ]
-            }
-          ]
-        },
-        webId: 'system',
-        dataset
-      });
+      await ctx.call('social.addEndpoint', { actorUri, predicate, endpoint });
     },
+    /**
+     * Wait for the actor to be created and all required keys to be added.
+     * @param {Context<{actorUri: string, additionalKeys?: string[], delayMs?: number, maxTries?: number}>} ctx - Context object
+     * @returns {Promise<waitForResource<any>>} - Promise that resolves when the actor is created and all required keys are added
+     */
     async awaitCreateComplete(ctx) {
       const { actorUri, additionalKeys = [], delayMs = 1000, maxTries = 20 } = ctx.params;
       const keysToCheck = ['publicKey', 'outbox', 'inbox', 'followers', 'following', ...additionalKeys];
@@ -165,31 +61,6 @@ const ActorService = {
         const actor = await this.actions.get({ actorUri, webId }, { parentCtx: ctx });
         return actor && actor[predicate];
       }
-    }
-  },
-  methods: {
-    isActor(resource) {
-      return arrayOf(resource['@type'] || resource.type).some(type => Object.values(ACTOR_TYPES).includes(type));
-    }
-  },
-  events: {
-    async 'ldp.resource.created'(ctx) {
-      const { resourceUri, newData } = ctx.params;
-      if (this.isActor(newData)) {
-        await this.actions.appendActorData({ actorUri: resourceUri }, { parentCtx: ctx });
-        await ctx.call('signature.keypair.generate', { actorUri: resourceUri });
-        await ctx.call('signature.keypair.attachPublicKey', { actorUri: resourceUri });
-      }
-    },
-    async 'ldp.resource.deleted'(ctx) {
-      const { resourceUri, oldData } = ctx.params;
-      if (this.isActor(oldData)) {
-        await ctx.call('signature.keypair.delete', { actorUri: resourceUri });
-      }
-    },
-    async 'auth.registered'(ctx) {
-      const { webId } = ctx.params;
-      await this.actions.appendActorData({ actorUri: webId }, { parentCtx: ctx });
     }
   }
 };
