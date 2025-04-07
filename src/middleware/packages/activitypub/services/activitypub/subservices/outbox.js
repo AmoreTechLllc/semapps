@@ -188,7 +188,7 @@ const OutboxService = {
 
           // Attach activity to the inbox of the recipient
           await this.broker.call(
-            'socials.store.add',
+            'social.store.add',
             {
               collectionUri: recipientInbox,
               item: activity

@@ -203,7 +203,7 @@ const StoreService = {
       async handler(ctx) {
         let { collectionUri, item, itemUri } = ctx.params;
         if (!itemUri && item) itemUri = typeof item === 'object' ? item.id || item['@id'] : item;
-        if (!itemUri) throw new Error('No valid item URI provided for activitypub.collection.add');
+        if (!itemUri) throw new Error('No valid item URI provided for social.store.add');
 
         // TODO also check external resources
         // const resourceExist = await ctx.call('ldp.resource.exist', { resourceUri: itemUri });
