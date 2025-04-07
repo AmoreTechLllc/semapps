@@ -1,7 +1,7 @@
 const { MIME_TYPES } = require('@semapps/mime-types');
 const { sanitizeSparqlUri } = require('@semapps/triplestore');
 const { MoleculerError } = require('moleculer').Errors;
-const { getValueFromDataType } = require('../../../../../utils');
+const { getValueFromDataType } = require('../../../util');
 
 /**
  * Retrieves the collection metadata from the triplestore
