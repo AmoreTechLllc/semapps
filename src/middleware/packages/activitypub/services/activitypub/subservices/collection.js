@@ -49,14 +49,14 @@ const CollectionService = {
       }
     },
     get(ctx) {
-      return ctx.call('social.resource.get', ctx.params);
+      return ctx.call('social.store.get', ctx.params);
     },
     exist(ctx) {
       const { resourceUri, webId } = ctx.params;
-      return ctx.call('social.resource.exist', { resourceUri, webId });
+      return ctx.call('social.store.exist', { resourceUri, webId });
     },
     async post(ctx) {
-      return await ctx.call('social.resource.post', ctx.params);
+      return await ctx.call('social.store.post', ctx.params);
     },
     /*
      * Checks if the collection is empty
