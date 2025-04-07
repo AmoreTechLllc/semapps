@@ -1,16 +1,97 @@
 const { MIME_TYPES } = require('@semapps/mime-types');
+const { ControlledContainerMixin, arrayOf } = require('@semapps/ldp');
 const { sanitizeSparqlQuery } = require('@semapps/triplestore');
+const getAction = require('./actions/get');
 
 /**
  * This service is used to replace triplestore services
  */
 const StoreService = {
   name: 'social.store',
-  dependencies: ['triplestore', 'social.resource'],
+  dependencies: ['triplestore'],
+  mixins: [ControlledContainerMixin],
   settings: {
-    selectActorData: null
+    selectActorData: null,
+    // ControlledContainerMixin settings
+    path: '/as/collection',
+    acceptedTypes: [
+      'https://www.w3.org/ns/activitystreams#Collection',
+      'https://www.w3.org/ns/activitystreams#OrderedCollection'
+    ],
+    accept: MIME_TYPES.JSON,
+    activateTombstones: false,
+    permissions: {},
+    // These default permissions can be overridden by providing
+    // a `permissions` param when calling activitypub.collection.post
+    newResourcesPermissions: webId => {
+      switch (webId) {
+        case 'anon':
+        case 'system':
+          return {
+            anon: {
+              read: true,
+              write: true
+            }
+          };
+
+        default:
+          return {
+            anon: {
+              read: true
+            },
+            user: {
+              uri: webId,
+              read: true,
+              write: true,
+              control: true
+            }
+          };
+      }
+    },
+    excludeFromMirror: true
   },
   actions: {
+    get: getAction,
+
+    post: {
+      visibility: 'public',
+      params: {
+        resource: { type: 'object' },
+        webId: { type: 'string', optional: true },
+        containerUri: { type: 'string', optional: true }
+      },
+      /**
+       * Posts a resource to a container
+       * @param {Context<{ resource: object, webId: string, containerUri: string }>} ctx - Moleculer context with params
+       * @returns {Promise<unknown>} - Returns the created resource
+       */
+      async handler(ctx) {
+        let { containerUri, resource, webId } = ctx.params;
+        if (!containerUri) {
+          containerUri = await this.actions.getContainerUri({ webId }, { parentCtx: ctx });
+        }
+
+        await this.actions.waitForContainerCreation({ containerUri });
+
+        const ordered = arrayOf(resource.type).includes('OrderedCollection');
+
+        // TODO Use ShEx to check collection validity
+        if (!ordered && (resource['semapps:sortPredicate'] || resource['semapps:sortOrder'])) {
+          throw new Error(
+            `Non-ordered collections cannot include semapps:sortPredicate or semapps:sortOrder predicates`
+          );
+        }
+
+        // Set default values
+        if (!resource['semapps:dereferenceItems']) resource['semapps:dereferenceItems'] = false;
+        if (ordered) {
+          if (!resource['semapps:sortPredicate']) resource['semapps:sortPredicate'] = 'as:published';
+          if (!resource['semapps:sortOrder']) resource['semapps:sortOrder'] = 'semapps:DescOrder';
+        }
+
+        return await ctx.call('ldp.container.post', { ...ctx.params, containerUri });
+      }
+    },
     /**
      * Get the owner of collections attached to actors
      * @param {Context<{ collectionUri: string, collectionKey: string }>} ctx - Context object with params
@@ -129,7 +210,7 @@ const StoreService = {
         // if (!resourceExist) throw new Error('Cannot attach a non-existing resource !')
 
         // TODO check why thrown error is lost and process is stopped
-        const collectionExist = await ctx.call('social.resource.exist', { resourceUri: collectionUri });
+        const collectionExist = await ctx.call('social.store.exist', { resourceUri: collectionUri });
         if (!collectionExist)
           throw new Error(
             `Cannot attach to a non-existing collection: ${collectionUri} (dataset: ${ctx.meta.dataset})`
@@ -161,7 +242,7 @@ const StoreService = {
         if (!itemUri && item) itemUri = typeof item === 'object' ? item.id || item['@id'] : item;
         if (!itemUri) throw new Error('No valid item URI provided for social.store.remove');
 
-        const collectionExist = await ctx.call('social.resource.exist', { resourceUri: collectionUri });
+        const collectionExist = await ctx.call('social.store.exist', { resourceUri: collectionUri });
         if (!collectionExist) throw new Error(`Cannot detach from a non-existing collection: ${collectionUri}`);
 
         await ctx.call('triplestore.update', {
