@@ -83,7 +83,16 @@ const ResourceService = {
         formerType: [
           { type: 'array', optional: true },
           { type: 'string', optional: true }
-        ]
+        ],
+        containersUris: {
+          type: 'array',
+          items: 'string',
+          optional: true
+        },
+        dataset: {
+          type: 'string',
+          optional: true
+        }
       },
       /**
        * Replaces the given resource with a Tombstone
@@ -91,23 +100,34 @@ const ResourceService = {
        * @returns {Promise<void>} - Returns a Promise that resolves when the tombstone is created
        */
       async handler(ctx) {
-        const { resourceUri, formerType } = ctx.params;
-        const expandedFormerTypes = await ctx.call('jsonld.parser.expandTypes', { types: formerType });
+        const { resourceUri, formerType, containersUris, dataset } = ctx.params;
+        // If the resource was in no container, skip...
+        if (containersUris.length > 0) {
+          // Check if tombstones are activated for this specific container
+          const containerOptions = await ctx.call('ldp.registry.getByUri', {
+            containerUri: containersUris[0],
+            dataset
+          });
 
-        // Insert directly the Tombstone in the triple store to avoid resource creation side-effects
-        await ctx.call('triplestore.insert', {
-          resource: {
-            '@id': resourceUri,
-            '@type': 'https://www.w3.org/ns/activitystreams#Tombstone',
-            'https://www.w3.org/ns/activitystreams#formerType': expandedFormerTypes.map(type => ({ '@id': type })),
-            'https://www.w3.org/ns/activitystreams#deleted': {
-              '@value': new Date().toISOString(),
-              '@type': 'http://www.w3.org/2001/XMLSchema#dateTime'
-            }
-          },
-          contentType: MIME_TYPES.JSON,
-          webId: 'system'
-        });
+          if (containerOptions.activateTombstones !== false && ctx.meta.activateTombstones !== false) {
+            const expandedFormerTypes = await ctx.call('jsonld.parser.expandTypes', { types: formerType });
+
+            // Insert directly the Tombstone in the triple store to avoid resource creation side-effects
+            await ctx.call('triplestore.insert', {
+              resource: {
+                '@id': resourceUri,
+                '@type': 'https://www.w3.org/ns/activitystreams#Tombstone',
+                'https://www.w3.org/ns/activitystreams#formerType': expandedFormerTypes.map(type => ({ '@id': type })),
+                'https://www.w3.org/ns/activitystreams#deleted': {
+                  '@value': new Date().toISOString(),
+                  '@type': 'http://www.w3.org/2001/XMLSchema#dateTime'
+                }
+              },
+              contentType: MIME_TYPES.JSON,
+              webId: 'system'
+            });
+          }
+        }
       }
     }
   },
@@ -130,28 +150,6 @@ const ResourceService = {
       // When resource is a actor, delete the keypair
       if (this.isActor(oldData)) {
         await ctx.call('signature.keypair.delete', { actorUri: resourceUri });
-      }
-
-      // Check if tombstones are globally activated
-      // When true create a tombstone for the deleted resource
-      if (this.settings.activateTombstones) {
-        console.warn('tombstone');
-        console.warn(ctx.params);
-        const { containersUris, dataset } = ctx.params;
-
-        // If the resource was in no container, skip...
-        if (containersUris.length > 0) {
-          // Check if tombstones are activated for this specific container
-          const containerOptions = await ctx.call('ldp.registry.getByUri', {
-            containerUri: containersUris[0],
-            dataset
-          });
-
-          if (containerOptions.activateTombstones !== false && ctx.meta.activateTombstones !== false) {
-            const formerType = oldData.type || oldData['@type'];
-            await this.actions.createTombstone({ resourceUri, formerType }, { meta: { dataset }, parentCtx: ctx });
-          }
-        }
       }
     },
     async 'auth.registered'(ctx) {

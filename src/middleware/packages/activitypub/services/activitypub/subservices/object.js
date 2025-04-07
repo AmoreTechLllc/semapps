@@ -1,5 +1,4 @@
 const { MIME_TYPES } = require('@semapps/mime-types');
-const { OBJECT_TYPES, ACTIVITY_TYPES } = require('../../../constants');
 
 const ObjectService = {
   name: 'activitypub.object',
@@ -8,8 +7,13 @@ const ObjectService = {
     podProvider: false,
     activateTombstones: true
   },
-  dependencies: ['ldp.resource'],
+  dependencies: ['social.resource'],
   actions: {
+    /**
+     * Get a resource from the store
+     * @param {Context<{ objectUri: string, actorUri: string, webId: string }>} ctx - Context object with params
+     * @returns {Promise<unknown>} - Returns the resource
+     */
     async get(ctx) {
       const { objectUri, actorUri, ...rest } = ctx.params;
 
@@ -23,50 +27,36 @@ const ObjectService = {
         accept: MIME_TYPES.JSON
       });
     },
+    /**
+     * Process an activity
+     * @param {Context<{ activity: object, actorUri: string }>} ctx - Moleculer context with params
+     * @returns {Promise<unknown>} - Returns the processed activity
+     * @deprecated - use social.processObject instead
+     */
     async process(ctx) {
-      let { activity, actorUri } = ctx.params;
-
-      return await ctx.call('social.processObject', { activity, actorUri });
+      return await ctx.call('social.processObject', ctx.params);
     },
+    /**
+     * Create a tombstone for a resource
+     * @param {Context<{ resourceUri: string, formerType: string[] }>} ctx - Moleculer context with params
+     * @returns {Promise<void>} - Returns a Promise that resolves when the tombstone is created
+     */
     async createTombstone(ctx) {
-      const { resourceUri, formerType } = ctx.params;
-      const expandedFormerTypes = await ctx.call('jsonld.parser.expandTypes', { types: formerType });
-
-      // Insert directly the Tombstone in the triple store to avoid resource creation side-effects
-      await ctx.call('triplestore.insert', {
-        resource: {
-          '@id': resourceUri,
-          '@type': 'https://www.w3.org/ns/activitystreams#Tombstone',
-          'https://www.w3.org/ns/activitystreams#formerType': expandedFormerTypes.map(type => ({ '@id': type })),
-          'https://www.w3.org/ns/activitystreams#deleted': {
-            '@value': new Date().toISOString(),
-            '@type': 'http://www.w3.org/2001/XMLSchema#dateTime'
-          }
-        },
-        contentType: MIME_TYPES.JSON,
-        webId: 'system'
-      });
+      await ctx.call('social.resource.createTombstone', ctx.params);
     }
   },
   events: {
+    // TODO: check if this can be moved away
     async 'ldp.resource.deleted'(ctx) {
       // Check if tombstones are globally activated
       if (this.settings.activateTombstones) {
         const { resourceUri, containersUris, oldData, dataset } = ctx.params;
 
-        // If the resource was in no container, skip...
-        if (containersUris.length > 0) {
-          // Check if tombstones are activated for this specific container
-          const containerOptions = await ctx.call('ldp.registry.getByUri', {
-            containerUri: containersUris[0],
-            dataset
-          });
-
-          if (containerOptions.activateTombstones !== false && ctx.meta.activateTombstones !== false) {
-            const formerType = oldData.type || oldData['@type'];
-            await this.actions.createTombstone({ resourceUri, formerType }, { meta: { dataset }, parentCtx: ctx });
-          }
-        }
+        const formerType = oldData.type || oldData['@type'];
+        await this.actions.createTombstone(
+          { resourceUri, formerType, containersUris, dataset },
+          { meta: { dataset }, parentCtx: ctx }
+        );
       }
     }
   }
