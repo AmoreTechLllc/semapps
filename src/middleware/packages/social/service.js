@@ -3,6 +3,7 @@ const getActor = require('./actions/getActor');
 const addEndpoint = require('./actions/addEndpoint');
 
 const ResourceService = require('./services/resource');
+const StoreService = require('./services/store');
 
 const SocialService = {
   name: 'social',
@@ -11,6 +12,9 @@ const SocialService = {
   created() {
     this.broker.createService({
       mixins: [ResourceService]
+    });
+    this.broker.createService({
+      mixins: [StoreService]
     });
   },
   actions: {
