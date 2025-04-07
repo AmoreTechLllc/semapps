@@ -35,7 +35,7 @@ const OutboxService = {
       permissions: collectionPermissionsWithAnonRead
     }
   },
-  dependencies: ['activitypub.object', 'activitypub.collection', 'activitypub.collections-registry'],
+  dependencies: ['activitypub.collections-registry', 'social.store'],
   async started() {
     await this.broker.call('activitypub.collections-registry.register', this.settings.collectionOptions);
   },
@@ -43,12 +43,12 @@ const OutboxService = {
     async post(ctx) {
       let { collectionUri, username, ...activity } = ctx.params;
 
-      const collectionExists = await ctx.call('activitypub.collection.exist', { resourceUri: collectionUri });
+      const collectionExists = await ctx.call('social.store.exist', { resourceUri: collectionUri });
       if (!collectionExists) {
         throw new E.NotFoundError();
       }
 
-      const actorUri = await ctx.call('activitypub.collection.getOwner', { collectionUri, collectionKey: 'outbox' });
+      const actorUri = await ctx.call('social.store.getOwner', { collectionUri, collectionKey: 'outbox' });
       if (!actorUri) {
         throw new E.BadRequestError('INVALID_COLLECTION', 'The collection is not a valid ActivityPub outbox');
       }
@@ -72,7 +72,7 @@ const OutboxService = {
       if (!ctx.meta.doNotProcessObject) {
         // Process object create, update or delete
         // and return an activity with the object ID
-        activity = await ctx.call('activitypub.object.process', { activity, actorUri });
+        activity = await ctx.call('social.processObject', { activity, actorUri });
       }
 
       if (!activity.actor) {
@@ -106,7 +106,7 @@ const OutboxService = {
       }
 
       // Attach the newly-created activity to the outbox
-      await ctx.call('activitypub.collection.add', {
+      await ctx.call('social.store.add', {
         collectionUri,
         item: activity
       });
@@ -188,7 +188,7 @@ const OutboxService = {
 
           // Attach activity to the inbox of the recipient
           await this.broker.call(
-            'activitypub.collection.add',
+            'socials.store.add',
             {
               collectionUri: recipientInbox,
               item: activity
