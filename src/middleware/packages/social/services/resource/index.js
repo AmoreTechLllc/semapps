@@ -1,16 +1,59 @@
 const { namedNode, literal, triple } = require('@rdfjs/data-model');
-const { arrayOf } = require('@semapps/ldp');
+const { ControlledContainerMixin, arrayOf } = require('@semapps/ldp');
 const { ACTOR_TYPES, AS_PREFIX } = require('@semapps/activitypub');
-const { getSlugFromUri } = require('../util');
+const { MIME_TYPES } = require('@semapps/mime-types');
+const { Context } = require('moleculer').Context;
+const getAction = require('./actions/get');
+
+const { getSlugFromUri } = require('../../util');
 
 const ResourceService = {
   name: 'social.resource',
+  mixins: [ControlledContainerMixin],
   dependencies: ['ldp.resource', 'signature'],
   settings: {
-    selectActorData: null
+    selectActorData: null,
+    // ControlledContainerMixin settings
+    path: '/as/collection',
+    acceptedTypes: [
+      'https://www.w3.org/ns/activitystreams#Collection',
+      'https://www.w3.org/ns/activitystreams#OrderedCollection'
+    ],
+    accept: MIME_TYPES.JSON,
+    activateTombstones: false,
+    permissions: {},
+    // These default permissions can be overridden by providing
+    // a `permissions` param when calling activitypub.collection.post
+    newResourcesPermissions: webId => {
+      switch (webId) {
+        case 'anon':
+        case 'system':
+          return {
+            anon: {
+              read: true,
+              write: true
+            }
+          };
+
+        default:
+          return {
+            anon: {
+              read: true
+            },
+            user: {
+              uri: webId,
+              read: true,
+              write: true,
+              control: true
+            }
+          };
+      }
+    },
+    excludeFromMirror: true
   },
   actions: {
-    get: {
+    get: getAction,
+    getResource: {
       visibility: 'public',
       params: {
         resourceUri: { type: 'string' },
@@ -61,6 +104,55 @@ const ResourceService = {
             webId: 'system'
           });
         }
+      }
+    },
+    post: {
+      visibility: 'public',
+      params: {
+        resource: { type: 'object' },
+        webId: { type: 'string', optional: true },
+        containerUri: { type: 'string', optional: true }
+      },
+      /**
+       * Posts a resource to a container
+       * @param {Context<{ resource: object, webId: string, containerUri: string }>} ctx - Moleculer context with params
+       * @returns {Promise<unknown>} - Returns the created resource
+       */
+      async handler(ctx) {
+        let { containerUri, resource, webId } = ctx.params;
+        if (!containerUri) {
+          containerUri = await this.actions.getContainerUri({ webId }, { parentCtx: ctx });
+        }
+
+        await this.actions.waitForContainerCreation({ containerUri });
+
+        const ordered = arrayOf(resource.type).includes('OrderedCollection');
+
+        // TODO Use ShEx to check collection validity
+        if (!ordered && (resource['semapps:sortPredicate'] || resource['semapps:sortOrder'])) {
+          throw new Error(
+            `Non-ordered collections cannot include semapps:sortPredicate or semapps:sortOrder predicates`
+          );
+        }
+
+        // Set default values
+        if (!resource['semapps:dereferenceItems']) resource['semapps:dereferenceItems'] = false;
+        if (ordered) {
+          if (!resource['semapps:sortPredicate']) resource['semapps:sortPredicate'] = 'as:published';
+          if (!resource['semapps:sortOrder']) resource['semapps:sortOrder'] = 'semapps:DescOrder';
+        }
+
+        return await ctx.call('ldp.container.post', { ...ctx.params, containerUri });
+
+        /* // Set default values
+        if (!ctx.params.resource['semapps:dereferenceItems']) ctx.params.resource['semapps:dereferenceItems'] = false;
+        if (ordered) {
+          if (!ctx.params.resource['semapps:sortPredicate'])
+            ctx.params.resource['semapps:sortPredicate'] = 'as:published';
+          if (!ctx.params.resource['semapps:sortOrder']) ctx.params.resource['semapps:sortOrder'] = 'semapps:DescOrder';
+        }
+
+        return await ctx.call('ldp.container.post', ctx.params); */
       }
     }
   },
