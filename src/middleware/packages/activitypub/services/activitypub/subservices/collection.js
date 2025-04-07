@@ -48,24 +48,36 @@ const CollectionService = {
         }
       }
     },
+    /**
+     * Get a resource from the store
+     * @param {Context<{ resourceUri: string, webId: string }>} ctx - Context object with params
+     * @returns {Promise<unknown>} - Returns the resource
+     * @deprecated Use social.store.get instead
+     */
     get(ctx) {
       return ctx.call('social.store.get', ctx.params);
     },
+    /**
+     * Check if a resource exists in the store
+     * @param {Context<{ resourceUri: string, webId: string }>} ctx - Context object with params
+     * @returns {Promise<boolean>} - Returns true if the resource exists, false otherwise
+     * @deprecated Use social.store.exist instead
+     */
     exist(ctx) {
-      const { resourceUri, webId } = ctx.params;
-      return ctx.call('social.store.exist', { resourceUri, webId });
+      return ctx.call('social.store.exist', ctx.params);
     },
     async post(ctx) {
       return await ctx.call('social.store.post', ctx.params);
     },
-    /*
+    /**
      * Checks if the collection is empty
-     * @param collectionUri The full URI of the collection
-     * @return true if the collection is empty
+     * @param {Context<{ collectionUri: string }>} ctx - Context object with params
+     * @param {string} collectionUri - The full URI of the collection
+     * @returns {Promise<boolean>} - Returns true if the collection is empty
+     * @deprecated Use social.store.isEmpty instead
      */
     async isEmpty(ctx) {
-      const { collectionUri } = ctx.params;
-      return ctx.call('social.store.isEmpty', { collectionUri });
+      return ctx.call('social.store.isEmpty', ctx.params);
     },
     /**
      * Checks if an item is in a collection
@@ -73,11 +85,10 @@ const CollectionService = {
      * @param {string} collectionUri - The full URI of the collection
      * @param {string} itemUri - The full URI of the item
      * @returns {Promise<boolean>} true if the collection exists
+     * @deprecated Use social.store.includes instead
      */
     async includes(ctx) {
-      const { collectionUri, itemUri } = ctx.params;
-
-      return ctx.call('social.store.includes', { collectionUri, itemUri });
+      return ctx.call('social.store.includes', ctx.params);
     },
     /**
      * Attach an object to a collection
@@ -88,9 +99,9 @@ const CollectionService = {
      * @returns {Promise<void>}
      */
     async add(ctx) {
-      let { collectionUri, item, itemUri } = ctx.params;
+      let { collectionUri, itemUri } = ctx.params;
 
-      await ctx.call('social.store.add', { collectionUri, item, itemUri });
+      await ctx.call('social.store.add', ctx.params);
 
       await ctx.emit('activitypub.collection.added', {
         collectionUri,
@@ -103,32 +114,35 @@ const CollectionService = {
      * @param item The resource to remove from the collection
      */
     async remove(ctx) {
-      let { collectionUri, item, itemUri } = ctx.params;
+      let { collectionUri, itemUri } = ctx.params;
 
-      await ctx.call('social.store.remove', { collectionUri, item, itemUri });
+      await ctx.call('social.store.remove', ctx.params);
 
       await ctx.emit('activitypub.collection.removed', {
         collectionUri,
         itemUri
       });
     },
-    /*
+    /**
      * Empty the collection, deleting all items it contains.
-     * @param collectionUri The full URI of the collection
+     * @param {Context<{ collectionUri: string }>} ctx - Context object with params
+     * @param {string} collectionUri - The full URI of the collection
+     * @returns {Promise<void>}
+     * @deprecated Use social.store.clear instead
      */
     async clear(ctx) {
-      const { collectionUri } = ctx.params;
-      await ctx.call('social.store.clear', { collectionUri });
+      await ctx.call('social.store.clear', ctx.params);
     },
-    /*
+    /**
      * Get the owner of collections attached to actors
-     * @param collectionUri - The full URI of the collection
-     * @param collectionKey - The key of the collection (eg. inbox)
+     * @param {Context<{ collectionUri: string, collectionKey: string }>} ctx - Context object with params
+     * @param {string} collectionUri - The full URI of the collection
+     * @param {string} collectionKey - The key of the collection (eg. inbox)
+     * @returns {Promise<string|null>} - Returns the owner of the collection or null if not found
+     * @deprecated Use social.store.getOwner instead
      */
     async getOwner(ctx) {
-      const { collectionUri, collectionKey } = ctx.params;
-
-      return ctx.call('social.store.getOwner', { collectionUri, collectionKey });
+      return ctx.call('social.store.getOwner', ctx.params);
     }
   },
   hooks: {
