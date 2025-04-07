@@ -18,7 +18,21 @@ function getSlugFromUri(uri) {
   return uri.match(new RegExp(`.*/(.*)`))[1];
 }
 
+const getValueFromDataType = result => {
+  switch (result.datatype?.value) {
+    case 'http://www.w3.org/2001/XMLSchema#boolean':
+      return result.value === 'true';
+
+    case 'http://www.w3.org/2001/XMLSchema#integer':
+      return parseInt(result.value, 10);
+
+    default:
+      return result.value;
+  }
+};
+
 module.exports = {
   delay,
-  getSlugFromUri
+  getSlugFromUri,
+  getValueFromDataType
 };
