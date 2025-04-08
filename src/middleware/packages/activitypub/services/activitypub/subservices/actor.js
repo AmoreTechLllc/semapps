@@ -62,6 +62,31 @@ const ActorService = {
         return actor && actor[predicate];
       }
     }
+  },
+  methods: {
+    isActor(resource) {
+      return arrayOf(resource['@type'] || resource.type).some(type => Object.values(ACTOR_TYPES).includes(type));
+    }
+  },
+  events: {
+    async 'ldp.resource.created'(ctx) {
+      const { resourceUri, newData } = ctx.params;
+      if (this.isActor(newData)) {
+        await this.actions.appendActorData({ actorUri: resourceUri }, { parentCtx: ctx });
+        await ctx.call('signature.keypair.generate', { actorUri: resourceUri });
+        await ctx.call('signature.keypair.attachPublicKey', { actorUri: resourceUri });
+      }
+    },
+    async 'ldp.resource.deleted'(ctx) {
+      const { resourceUri, oldData } = ctx.params;
+      if (this.isActor(oldData)) {
+        await ctx.call('keys.deleteAllKeysForWebId', { webId: resourceUri });
+      }
+    },
+    async 'auth.registered'(ctx) {
+      const { webId } = ctx.params;
+      await this.actions.appendActorData({ actorUri: webId }, { parentCtx: ctx });
+    }
   }
 };
 
