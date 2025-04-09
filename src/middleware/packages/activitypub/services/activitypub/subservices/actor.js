@@ -1,4 +1,6 @@
 const { MIME_TYPES } = require('@semapps/mime-types');
+const { arrayOf } = require('@semapps/ldp');
+const { ACTOR_TYPES } = require('../../../constants');
 const { waitForResource } = require('../../../utils');
 
 /** @type {import('moleculer').ServiceSchema} */
@@ -72,7 +74,7 @@ const ActorService = {
     async 'ldp.resource.created'(ctx) {
       const { resourceUri, newData } = ctx.params;
       if (this.isActor(newData)) {
-        await this.actions.appendActorData({ actorUri: resourceUri }, { parentCtx: ctx });
+        await ctx.call('social.resource.appendActorData', { actorUri: resourceUri }, { parentCtx: ctx });
         await ctx.call('signature.keypair.generate', { actorUri: resourceUri });
         await ctx.call('signature.keypair.attachPublicKey', { actorUri: resourceUri });
       }
@@ -85,7 +87,7 @@ const ActorService = {
     },
     async 'auth.registered'(ctx) {
       const { webId } = ctx.params;
-      await this.actions.appendActorData({ actorUri: webId }, { parentCtx: ctx });
+      await ctx.call('social.resource.appendActorData', { actorUri: webId }, { parentCtx: ctx });
     }
   }
 };
