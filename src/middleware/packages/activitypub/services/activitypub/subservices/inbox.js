@@ -35,7 +35,7 @@ const InboxService = {
         throw new Error(`The collectionUri ${collectionUri} is not a valid URL`);
       }
 
-      if (!(await ctx.call('ldp.resource.exist', { resourceUri: collectionUri, webId: 'system' }))) {
+      if (!(await ctx.call('social.store.exist', { resourceUri: collectionUri, webId: 'system' }))) {
         throw E.NotFoundError();
       }
 
@@ -48,7 +48,7 @@ const InboxService = {
       const inboxOwner = await ctx.call('activitypub.collection.getOwner', { collectionUri, collectionKey: 'inbox' });
 
       // Verify that the account exists and has not been deleted
-      const account = await ctx.call('auth.account.findByWebId', { webId: inboxOwner });
+      const account = await ctx.call('social.auth.findByWebId', { webId: inboxOwner });
       if (!account) throw new E.NotFoundError();
       if (account.deletedAt) throw new MoleculerError(`User does not exist anymore`, 410, 'GONE');
 
@@ -69,23 +69,7 @@ const InboxService = {
       }
 
       if (!ctx.meta.skipSignatureValidation) {
-        if (!ctx.meta.rawBody || !ctx.meta.originalHeaders)
-          throw new Error(`Cannot validate HTTP signature because of missing meta (rawBody or originalHeaders)`);
-
-        const validDigest = await ctx.call('signature.verifyDigest', {
-          body: ctx.meta.rawBody, // Stored by parseJson middleware
-          headers: ctx.meta.originalHeaders
-        });
-
-        const { isValid: validSignature } = await ctx.call('signature.verifyHttpSignature', {
-          url: collectionUri,
-          method: 'POST',
-          headers: ctx.meta.originalHeaders
-        });
-
-        if (!validDigest || !validSignature) {
-          throw new E.UnAuthorizedError('INVALID_SIGNATURE');
-        }
+        await ctx.call('social.validateSignature', { meta: ctx.meta, collectionUri });
       }
 
       // TODO check activity is valid
@@ -101,7 +85,7 @@ const InboxService = {
       // so do not store it in the inbox (Mastodon works the same way)
       if (activity.id && !activity.id.includes('#')) {
         // Save the remote activity in the local triple store
-        await ctx.call('ldp.remote.store', {
+        await ctx.call('social.resource.store', {
           resource: objectIdToCurrent(activity),
           mirrorGraph: false, // Store in default graph as activity may not be public
           keepInSync: false, // Activities are immutable
@@ -150,7 +134,7 @@ const InboxService = {
       if (fromDate) filters.push(`?published >= "${fromDate.toISOString()}"^^xsd:dateTime`);
       if (toDate) filters.push(`?published < "${toDate.toISOString()}"^^xsd:dateTime`);
 
-      const results = await ctx.call('triplestore.query', {
+      const results = await ctx.call('social.store.query', {
         query: `
           PREFIX as: <https://www.w3.org/ns/activitystreams#>
           PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
