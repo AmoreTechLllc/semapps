@@ -23,7 +23,7 @@ const InboxService = {
       permissions: collectionPermissionsWithAnonRead
     }
   },
-  dependencies: ['activitypub.collection', 'activitypub.collections-registry'],
+  dependencies: ['activitypub.collection', 'activitypub.collections-registry', 'social'],
   async started() {
     await this.broker.call('activitypub.collections-registry.register', this.settings.collectionOptions);
   },
