@@ -129,6 +129,29 @@ const ResourceService = {
           }
         }
       }
+    },
+    store: {
+      visibility: 'public',
+      params: {
+        resource: { type: 'object' },
+        mirrorGraph: { type: 'boolean' },
+        webId: { type: 'string' },
+        keepInSync: { type: 'boolean' }
+      },
+      /**
+       * Stores a resource in a container
+       * @param {Context<{ resource: object, webId: string, containerUri: string }>} ctx - Moleculer context with params
+       * @returns {Promise<unknown>} - Returns the created resource
+       */
+      async handler(ctx) {
+        const { resource, mirrorGraph, keepInSync, webId } = ctx.params;
+        await ctx.call('ldp.remote.store', {
+          resource,
+          mirrorGraph, // Store in default graph as activity may not be public
+          keepInSync, // Activities are immutable
+          webId
+        });
+      }
     }
   },
   methods: {

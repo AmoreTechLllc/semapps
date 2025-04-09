@@ -283,6 +283,25 @@ const StoreService = {
           `
         });
       }
+    },
+    /**
+     * Send a triplestore query to the triplestore service
+     * @param {Context<{ query: string, accept: string, webId: string }>} ctx - Context object with params
+     * @param {string} query - The SPARQL query to execute
+     * @param {string} accept - The MIME type to accept
+     * @param {string} webId - The webId of the user
+     * @returns {Promise<any>} - Returns the results of the query
+     */
+    query: {
+      visibility: 'public',
+      params: {
+        query: { type: 'string' },
+        accept: { type: 'string' },
+        webId: { type: 'string' }
+      },
+      async handler(ctx) {
+        return await ctx.call('triplestore.query', { ...ctx.params, webId: 'system' });
+      }
     }
   }
 };
